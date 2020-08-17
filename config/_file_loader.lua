@@ -16,10 +16,6 @@ return {
     'modules.gui.server-ups',
     'modules.gui.player-list',
     'modules.gui.lobby',
-<<<<<<< Updated upstream
-=======
-    
->>>>>>> Stashed changes
 
     --Mini-games
     'modules.mini-games.greefer-start',
