@@ -13,6 +13,11 @@ require 'config.expcore.command_runtime_disable' --required to load before runni
 --- Locals
 local WaitingGui = require 'modules.gui.mini_game_waiting'
 local LoadingGui = require 'modules.gui.mini_game_loading'
+
+=======
+local LobbyGui = require 'modules.gui.lobby'
+
+changes
 local Mini_games = {
     _prototype = {},
     mini_games = {},
@@ -152,6 +157,7 @@ function Mini_games._prototype:add_map_gen(surface_name, shape)
     self:add_surfaces(0, surface_name)
     if type(shape) == 'string' then shape = require(shape) end
     if shape then gen.add_surface(surface_name, shape) end
+<<<<<<< Updated upstream
 end
 
 --- Add a callback to check if the mini game is ready to start, if not used game starts after init, common example is to check map gen is done
@@ -172,6 +178,28 @@ function Mini_games._prototype:set_gui(gui_element, gui_callback)
     self.gui_callback = gui_callback
 end
 
+=======
+end
+
+--- Add a callback to check if the mini game is ready to start, if not used game starts after init, common example is to check map gen is done
+function Mini_games._prototype:set_ready_condition(callback, hide_load_gui)
+    self.ready_condition = callback
+    self.hide_load_gui = hide_load_gui
+end
+
+--- Add a callback to check if a player should be added as a participant, if not used participants selected randomly, callback also used to clean up its self
+function Mini_games._prototype:set_participant_selector(callback, hide_wait_gui)
+    self.participant_selector = callback
+    self.hide_wait_gui = hide_wait_gui
+end
+
+--- Add a gui element to be used in the vote gui, this gui element will be similar to /start with the callback being used to read the values
+function Mini_games._prototype:set_gui(gui_element, gui_callback)
+    self.gui = gui_element
+    self.gui_callback = gui_callback
+end
+
+>>>>>>> Stashed changes
 --- Add a command that can only be used in this mini game, this will automatically enable and disable commands that are linked to this mini game
 function Mini_games._prototype:add_command(command_name)
     self.commands[#self.commands + 1] = command_name
@@ -183,6 +211,7 @@ end
 --- Get the currently game, returns the mini game object, mostly used internally
 function Mini_games.get_current_game()
     return Mini_games.mini_games[primitives.current_game]
+<<<<<<< Updated upstream
 end
 
 --- Get the currently running game, gets the name of the current game that is running, will be nil if loading or closing
@@ -212,6 +241,37 @@ local function raise_event(name, player)
     })
 end
 
+=======
+end
+
+--- Get the currently running game, gets the name of the current game that is running, will be nil if loading or closing
+function Mini_games.get_running_game()
+    if primitives.state ~= 'Starting' and primitives.state ~= 'Started' then return end
+    return primitives.current_game
+end
+
+--- Get the current state of the mini game server, get the current state of the mini game system
+function Mini_games.get_current_state()
+    return primitives.state
+end
+
+--- Get the start time for the running game, get the start tick for the current mini game, during loading this is the time when loading started
+function Mini_games.get_start_time()
+    return primitives.start_tick
+end
+
+----- Participants -----
+
+--- Internal, Raise a mini game event, this is used for all participant events
+local function raise_event(name, player)
+    script.raise_event(Mini_games.events[name], {
+        name = Mini_games.events[name],
+        player_index = player.index,
+        tick = game.tick
+    })
+end
+
+>>>>>>> Stashed changes
 --- Respawn a spectator, if a game is running then they are placed in a god controller
 -- If there is a game closing then they will be placed in a character in the lobby
 -- If there if the server is closed nothing will happen as they have already been moved to the lobby
@@ -230,12 +290,21 @@ function Mini_games.respawn_spectator(player)
         player.set_controller{ type = defines.controllers.spectator }
     end
 end
+<<<<<<< Updated upstream
 
 --- Get all the participants in a game, this should be used rather than force.players or game.connected_players since this excludes spectators
 function Mini_games.get_participants()
     return participants
 end
 
+=======
+
+--- Get all the participants in a game, this should be used rather than force.players or game.connected_players since this excludes spectators
+function Mini_games.get_participants()
+    return participants
+end
+
+>>>>>>> Stashed changes
 --- Get the names of all the participants in a game, optionally return a lookup table rather than calling is_participant many times
 function Mini_games.get_participant_names(lookup)
     local rtn = {}
@@ -286,9 +355,15 @@ function Mini_games.remove_participant(player)
         end
     end
 end
+<<<<<<< Updated upstream
 
 ----- Participant Event Logic -----
 
+=======
+
+----- Participant Event Logic -----
+
+>>>>>>> Stashed changes
 --- Used with role events to trigger add and remove participant, filters the handler to only be called with the Participant role
 local function role_event_filter(handler)
     return function(event)
@@ -507,6 +582,7 @@ function Mini_games.show_waiting_screen(player)
     dlog('Show Waiting:', player.name)
     WaitingGui.show_gui({ player_index = player.index }, primitives.current_game, #participants, primitives.participant_requirement)
 end
+<<<<<<< Updated upstream
 
 --- Check if the game has enough participants to start, will move onto loading screen or start once the require amount is met
 -- If the amount is below the required at any point between on_init and on_start the waiting screen will be shown
@@ -658,6 +734,159 @@ function Mini_games.start_game(name, player_count, args)
         end
     end
 
+=======
+
+--- Check if the game has enough participants to start, will move onto loading screen or start once the require amount is met
+-- If the amount is below the required at any point between on_init and on_start the waiting screen will be shown
+function check_participant_count()
+    if primitives.state ~= 'Waiting' and primitives.state ~= 'Loading' then return end
+    local mini_game = Mini_games.get_current_game()
+    local selector = mini_game.participant_selector
+
+    -- If the participants count is less than required, and there has been less 2 minutes waiting, stop load checking, and update wait gui
+    if #participants < primitives.participant_requirement and game.tick < primitives.start_tick + 7200 then
+        WaitingGui.update_gui(#participants, primitives.participant_requirement)
+        if primitives.state == 'Waiting' then return end
+        primitives.state = 'Waiting'
+        dlog('===== State Change =====')
+
+        dlog('Remove Loading')
+        Event.remove_removable_nth_tick(60, check_ready)
+        primitives.timeout_nonce = 0
+        LoadingGui.remove_gui()
+        if not selector then return end
+
+        -- Find all possible participants who arent already in the participants list
+        local done = Mini_games.get_participant_names(true)
+        local all_participants = Roles.get_role_by_name('Participant'):get_players(true)
+        if #all_participants > 0 then table.shuffle_table(all_participants) end
+
+        -- Show the custom participant selector to the possible participants
+        for _, player in ipairs(all_participants) do
+            if not done[player.name] then
+                done[player.name] = true
+                dlog('Add selector:', player.name)
+                xpcall(selector, internal_error, player)
+            end
+        end
+
+        return
+    end
+
+    -- Check if we are already in loading to prevent extra calls
+    if primitives.state == 'Loading' then return end
+
+    -- When requirement is met remove the gui
+    dlog('Remove Waiting')
+    WaitingGui.remove_gui(true)
+    primitives.state = 'Loading'
+    dlog('===== State Change =====')
+    if mini_game.ready_condition then
+        -- Start checking that the game is ready to start
+        Event.add_removable_nth_tick(60, check_ready)
+        if mini_game.hide_load_gui and not selector then return end
+        -- Show the loading screen and remove any custom selector
+        for _, player in ipairs(game.connected_players) do
+            if not mini_game.hide_load_gui then
+                Mini_games.show_loading_screen(player)
+            end
+            if selector then
+                dlog('Remove selector:', player.name)
+                xpcall(selector, internal_error, player, true)
+            end
+        end
+    else
+        -- No checks needed, start game count down now
+        dlog('Game Countdown')
+        game.print('Game starts in 10 seconds')
+        primitives.timeout_nonce = math.random()
+        Task.set_timeout(10, start_game, primitives.timeout_nonce)
+    end
+
+end
+
+--- Used to trigger a delayed check for the player count, will force waiting to be skipped
+local delayed_player_count_check = Token.register(check_participant_count)
+
+--- Starts a mini game if no other games are running, calls on_init then on_participant_added
+function Mini_games.start_game(name, player_count, args)
+    if vars.is_lobby then return start_from_lobby(name, player_count, args) end
+
+    -- Setup and verify all args passed to the game
+    args = args or {}
+    local mini_game = assert(Mini_games.mini_games[name], 'This mini game does not exist')
+    assert(mini_game.options == #args, 'Wrong number of arguments')
+    assert(primitives.current_game == nil, 'A game is already running, please use /stop')
+    primitives.participant_requirement = player_count
+    primitives.custom_selector = false
+    primitives.current_game = name
+    primitives.start_tick = game.tick
+    primitives.state = 'Waiting'
+    dlog('===== State Change =====')
+    dlog('Enable handlers:', name)
+
+    -- Enable all events for this mini game
+    for _, event in ipairs(mini_game.events) do
+        -- event = { event_name, handler }
+        Event.add_removable(unpack(event))
+    end
+
+    -- Enable all nth tick events for this mini game
+    for _, event in ipairs(mini_game.on_nth_tick) do
+        -- event = { tick, handler }
+        Event.add_removable_nth_tick(unpack(event))
+    end
+
+    -- Enable all commands for this mini game
+    for _, command_name  in ipairs(mini_game.commands) do
+        Commands.enable(command_name)
+    end
+
+    -- Call the on_init core event
+    local on_init = mini_game.core_events.on_init
+    if on_init then
+        dlog('Call: On Init')
+        xpcall(on_init, internal_error, args)
+    end
+
+    -- Get all the possible participants for this game
+    local done, selector = {}, mini_game.participant_selector
+    local all_participants = Roles.get_role_by_name('Participant'):get_players(true)
+    if #all_participants > 0 then table.shuffle_table(all_participants) end
+
+    if selector then
+        -- With a custom selector, first clear the participants table
+        for index in ipairs(participants) do
+            participants[index] = nil
+        end
+        -- Then call the selector on all possible participants
+        for _, player in ipairs(all_participants) do
+            done[player.name] = true
+            dlog('Add selector:', player.name)
+            xpcall(selector, internal_error, player)
+        end
+    else
+        -- When no selector, first raise the added event for existing participants
+        for _, player in ipairs(participants) do
+            dlog('Participant added:', player.name)
+            raise_event('on_participant_added', player)
+            done[player.name] = true
+        end
+        -- Then attempt to fill up to the required amount
+        for _, player in ipairs(all_participants) do
+            if #participants >= player_count then break end
+            if not done[player.name] then done[player.name] = Mini_games.add_participant(player) end
+        end
+    end
+
+    -- Show the waiting screen to all players unless hide_wait_gui is true and player is not a spectator
+    for _, player in ipairs(game.connected_players) do
+        if not mini_game.hide_wait_gui or not done[player.name] then
+            Mini_games.show_waiting_screen(player)
+        end
+    end
+
+>>>>>>> Stashed changes
     -- Check if we are able to start now, if not then this will be checked again with add_participant
     Task.set_timeout(120, delayed_player_count_check)
     check_participant_count()
@@ -683,6 +912,7 @@ local close_game = Token.register(function(timeout_nonce)
         dlog('Call: On Close')
         xpcall(on_close, internal_error)
     end
+<<<<<<< Updated upstream
 
     primitives.current_game = nil
     primitives.state = 'Closed'
@@ -760,6 +990,85 @@ function Mini_games.stop_game()
 
 end
 
+=======
+
+    primitives.current_game = nil
+    primitives.state = 'Closed'
+    dlog('===== State Change =====')
+end)
+
+--- Stop a mini game, calls on_stop then on_participant_removed
+function Mini_games.stop_game()
+    local mini_game = assert(Mini_games.get_current_game(), 'No mini game is currently running')
+    local skip_timeout = primitives.state ~= 'Started'
+    Event.remove_removable_nth_tick(60, check_ready)
+    primitives.state = 'Stopping'
+    dlog('===== State Change =====')
+
+    -- Calls on_stop core event to stop the game and to get the data to write to file
+    -- on_stop should return an array of position entries which are tables of the
+    -- on_stop is only called if the game was started, it would not make sense to write results to a file when no game was started
+    -- following format: { place = integer, score = number, players = array of player names }
+    local on_stop = mini_game.core_events.on_stop
+    if not skip_timeout and on_stop then
+        dlog('Call: On Stop')
+        local success, res = xpcall(on_stop, internal_error)
+        if success then
+            local event = {
+                type = "stopped_game",
+                results = res or {},
+            }
+            game.write_file('mini_games/stopped_game', game.table_to_json(event), false, 0)
+        end
+    end
+
+    -- Remove all participants from the game, this also places them into spectator, and removes selector if present
+    local selector = mini_game.participant_selector
+    for _, player in ipairs(participants) do
+        Mini_games.remove_participant(player)
+        if skip_timeout and selector then
+            dlog('Remove selector:', player.name)
+            xpcall(selector, internal_error, player, true)
+        end
+    end
+
+    -- Disable all events for this mini game
+    dlog('Disable handlers:', mini_game.name)
+    for _, event in ipairs(mini_game.events) do
+        -- event = { event_name, handler }
+        Event.remove_removable(unpack(event))
+    end
+
+    -- Disable all nth tick events for this mini game
+    for _, event in ipairs(mini_game.on_nth_tick) do
+        -- event = { tick, handler }
+        Event.remove_removable_nth_tick(unpack(event))
+    end
+
+    -- Disable all commands for this mini game
+    for _, command_name  in ipairs(mini_game.commands) do
+        Commands.enable(command_name)
+    end
+
+    if skip_timeout then
+        -- If this was called during loading, then skip the 10 second delay
+        dlog('Lobby Countdown', 'Remove Waiting', 'Remove Loading')
+        LoadingGui.remove_gui()
+        WaitingGui.remove_gui()
+        game.print('Game start canceled')
+        primitives.timeout_nonce = math.random()
+        Task.set_timeout_in_ticks(1, close_game, primitives.timeout_nonce)
+    else
+        -- If this was called normally wait 10 seconds before closing the game
+        dlog('Lobby Countdown')
+        game.print('Returning to lobby in 10 seconds')
+        primitives.timeout_nonce = math.random()
+        Task.set_timeout(10, close_game, primitives.timeout_nonce)
+    end
+
+end
+
+>>>>>>> Stashed changes
 --- Raise an error which causes the mini game to stop
 function Mini_games.error_in_game(error_game)
     game.print("An error has occurred things may be broken, error: "..error_game)
@@ -775,6 +1084,7 @@ Commands.new_command('kick_all', 'Kicks all players.')
         game.kick_player(player, "You cant stay here")
     end
 end)
+<<<<<<< Updated upstream
 
 --- Sends all players back to the lobby server
 Commands.new_command('lobby_all', 'Send everyone to the lobby server.')
@@ -812,6 +1122,45 @@ local on_start_click = function (_,element,_)
     end
 end
 
+=======
+
+--- Sends all players back to the lobby server
+Commands.new_command('lobby_all', 'Send everyone to the lobby server.')
+:register(function(_,_)
+    for _, player in ipairs(game.connected_players) do
+        player.connect_to_server{ address = global.servers["lobby"], name = "lobby" }
+    end
+end)
+
+--- Sets if this server is the lobby
+Commands.new_command('set_lobby', 'Command to tell this server if its the lobby.')
+:add_param('data',"boolean")
+:register(function(_,data,_)
+    vars.is_lobby = data
+end)
+
+----- Main Gui -----
+
+--- Used to start a mini game, will also hide the start menu from every one
+local mini_game_list, player_count_slider
+local on_start_click = function (_,element,_)
+    local name = element.parent.name
+    local scroll_table = element.parent.parent
+    local mini_game = Mini_games.mini_games[name]
+    local args
+    if mini_game.gui_callback then
+        args = mini_game.gui_callback(scroll_table[name..'_flow'])
+    end
+
+    local player_count = scroll_table[player_count_slider.name].slider_value
+    Mini_games.start_game(name, player_count, args)
+    for _, player in ipairs(game.connected_players) do
+        Gui.toggle_left_element(player, mini_game_list, false)
+        Gui.update_top_flow(player)
+    end
+end
+
+>>>>>>> Stashed changes
 --- Slider used to select the number of players to take part
 player_count_slider =
 Gui.element{
@@ -823,10 +1172,17 @@ Gui.element{
     discrete_slider = true,
     discrete_values = true,
     style = 'notched_slider'
+<<<<<<< Updated upstream
 }
 :style{
     horizontally_stretchable = true
 }
+=======
+}
+:style{
+    horizontally_stretchable = true
+}
+>>>>>>> Stashed changes
 :on_value_changed(function(_, element, _)
     element.parent.player_count.caption = 'Players: '..element.slider_value
 end)
@@ -861,10 +1217,42 @@ Gui.element(function(_,parent,name)
     end
 end)
 
+<<<<<<< Updated upstream
+=======
+lobby = 
+Gui.element(function(event_trigger,parent)
+    local container = Gui.container(parent,event_trigger,200)
+
+    -- Add the header
+    Gui.header(container, "Game-Lobby", "You can find a game here.")
+
+    -- Add the scroll table
+	 local scroll_table = Gui.scroll_table(container, 250, 3)
+	 local scroll_table_style = scroll_table.style
+	 scroll_table_style.padding = {3, 3}
+	 scroll_table_style.top_cell_padding = 3
+	 scroll_table_style.bottom_cell_padding = 3
+
+    -- Add the player slider
+    scroll_table.add{type='empty-widget'}
+    scroll_table.add{type='label', style = 'heading_1_label', name='player_count', caption='Players: 6'}
+    player_count_slider(scroll_table)
+
+    -- Add all the mini games
+   -- for _, name in ipairs(Mini_games.available) do
+    --    add_mini_game(scroll_table, name)
+  --  end
+
+    return container.parent
+end)
+:add_to_left_flow()
+
+>>>>>>> Stashed changes
 --- Main gui to select a mini game from
 mini_game_list =
 Gui.element(function(event_trigger,parent)
     local container = Gui.container(parent,event_trigger,200)
+<<<<<<< Updated upstream
 
     -- Add the header
     Gui.header(container, "Start a game", "You can start the game here.")
@@ -889,6 +1277,36 @@ Gui.element(function(event_trigger,parent)
     return container.parent
 end)
 :add_to_left_flow()
+=======
+
+    -- Add the header
+    Gui.header(container, "Start a game", "You can start the game here.")
+
+    -- Add the scroll table
+    local scroll_table = Gui.scroll_table(container, 250, 3)
+    local scroll_table_style = scroll_table.style
+    scroll_table_style.padding = {3, 3}
+    scroll_table_style.top_cell_padding = 3
+    scroll_table_style.bottom_cell_padding = 3
+
+    -- Add the player slider
+    scroll_table.add{type='empty-widget'}
+    scroll_table.add{type='label', style = 'heading_1_label', name='player_count', caption='Players: 6'}
+    player_count_slider(scroll_table)
+
+    -- Add all the mini games
+    for _, name in ipairs(Mini_games.available) do
+        add_mini_game(scroll_table, name)
+    end
+
+    return container.parent
+end)
+:add_to_left_flow()
+
+Gui.left_toolbar_button('utility/change_recipe', 'Select a game to join', lobby, function(player)
+    return Roles.player_allowed(player, 'gui/game_start') and (primitives.state == 'Closing' or primitives.state == 'Closed')
+end)
+>>>>>>> Stashed changes
 
 --- Add a toggle button that can be used when no game is running
 Gui.left_toolbar_button('utility/check_mark', 'Select a mini game to start', mini_game_list, function(player)
